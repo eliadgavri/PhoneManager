@@ -4,22 +4,23 @@ import com.motorola.demo.model.BlockedNumberObj;
 import com.motorola.demo.model.ContactObj;
 import com.motorola.demo.model.PhoneRecordObj;
 import com.motorola.demo.service.PhoneService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Date;
+import java.util.*;
 import java.text.SimpleDateFormat;
-import java.util.Optional;
 
 @RestController
 public class PhoneController {
 
     @Autowired
     PhoneService phoneService;
+
+    Logger logger = LoggerFactory.getLogger(PhoneController.class);
 
     /**
      * Responsible for saving new blocked number if it's not already blocked.
@@ -29,11 +30,17 @@ public class PhoneController {
 
     @GetMapping("/newBlockedNumber")
     public void newBlockedNumber(@RequestParam String phoneNumber) {
-        Optional<BlockedNumberObj> blockedNumber = phoneService.getBlockedNumber(phoneNumber);
-        if (blockedNumber.isEmpty()) {
-            BlockedNumberObj blockedNumberObj = new BlockedNumberObj();
-            blockedNumberObj.setPhoneNumber(phoneNumber);
-            phoneService.saveBlockedNumber(blockedNumberObj);
+        try {
+            Optional<BlockedNumberObj> blockedNumber = phoneService.getBlockedNumber(phoneNumber);
+            if (blockedNumber.isEmpty()) {
+                BlockedNumberObj blockedNumberObj = new BlockedNumberObj();
+                blockedNumberObj.setPhoneNumber(phoneNumber);
+                phoneService.saveBlockedNumber(blockedNumberObj);
+            } else {
+                logger.warn("Attempt to add phone number " + phoneNumber + " to blocked list but it is already blocked");
+            }
+        } catch (Exception ex) {
+            logger.error("An error occurred while trying to add phone number " + phoneNumber + " to blocked list", ex);
         }
     }
 
@@ -45,8 +52,16 @@ public class PhoneController {
 
     @GetMapping("/removeBlockedNumber")
     public void removeBlockedNumber(@RequestParam String phoneNumber) {
-        Optional<BlockedNumberObj> blockedNumber = phoneService.getBlockedNumber(phoneNumber);
-        blockedNumber.ifPresent(blockedNumberObj -> phoneService.removeBlockedNumber(blockedNumberObj));
+        try {
+            Optional<BlockedNumberObj> blockedNumber = phoneService.getBlockedNumber(phoneNumber);
+            if (blockedNumber.isPresent()) {
+                phoneService.removeBlockedNumber(blockedNumber.get());
+            } else {
+                logger.warn("Attempt to remove phone number " + phoneNumber + " from blocked list but it is not a blocked number");
+            }
+        } catch (Exception ex) {
+            logger.error("An error occurred while trying to remove phone number " + phoneNumber + " from blocked list", ex);
+        }
     }
 
     /**
@@ -60,13 +75,19 @@ public class PhoneController {
 
     @GetMapping("/newContact")
     public void newContact(@RequestParam String name, @RequestParam String phoneNumber) {
-        Optional<ContactObj> contact = phoneService.getContact(phoneNumber);
-        if (contact.isEmpty()) {
-            ContactObj contactObj = new ContactObj();
-            contactObj.setName(name);
-            contactObj.setPhoneNumber(phoneNumber);
-            phoneService.saveContact(contactObj);
-            updateContactInPhoneRecords(phoneNumber, true);
+        try {
+            Optional<ContactObj> contact = phoneService.getContact(phoneNumber);
+            if (contact.isEmpty()) {
+                ContactObj contactObj = new ContactObj();
+                contactObj.setName(name);
+                contactObj.setPhoneNumber(phoneNumber);
+                phoneService.saveContact(contactObj);
+                updateContactInPhoneRecords(phoneNumber, true);
+            } else {
+                logger.warn("Attempt to add phone number " + phoneNumber + " to contact list but it is already there");
+            }
+        } catch (Exception ex) {
+            logger.error("An error occurred while trying to add new phone number " + phoneNumber + " to contacts list", ex);
         }
     }
 
@@ -80,10 +101,16 @@ public class PhoneController {
 
     @GetMapping("/removeContact")
     public void removeContact(@RequestParam String phoneNumber) {
-        Optional<ContactObj> contact = phoneService.getContact(phoneNumber);
-        if (contact.isPresent()) {
-            phoneService.removeContact(contact.get());
-            updateContactInPhoneRecords(phoneNumber, false);
+        try {
+            Optional<ContactObj> contact = phoneService.getContact(phoneNumber);
+            if (contact.isPresent()) {
+                phoneService.removeContact(contact.get());
+                updateContactInPhoneRecords(phoneNumber, false);
+            } else {
+                logger.warn("Attempt to remove phone number " + phoneNumber + " from contacts but it is not a contact");
+            }
+        } catch (Exception ex) {
+            logger.error("An error occurred while trying to remove phone number " + phoneNumber + " from contacts list", ex);
         }
     }
 
@@ -100,20 +127,26 @@ public class PhoneController {
     @GetMapping("/newPhoneRecord")
     public void newPhoneRecord(@RequestParam String time, @RequestParam String callType, @RequestParam Integer duration, @RequestParam String phoneNumber) throws Exception {
         Optional<BlockedNumberObj> blockedNumber = phoneService.getBlockedNumber(phoneNumber);
-        if (blockedNumber.isPresent()) {
-            throw new Exception("Phone record from blocked number !!!");
-        } else {
-            Date date = new SimpleDateFormat("dd-MM-yy hh:mm:ss").parse(time);
-            Optional<ContactObj> contactObj = phoneService.getContact(phoneNumber);
-            PhoneRecordObj phoneRecordObj = PhoneRecordObj
-                    .builder()
-                    .time(date)
-                    .callType(callType)
-                    .duration(duration)
-                    .phoneNumber(phoneNumber)
-                    .isContact(contactObj.isPresent())
-                    .build();
-            phoneService.savePhoneRecord(phoneRecordObj);
+        try {
+            if (blockedNumber.isPresent()) {
+                logger.warn("Attempt to add new phone record from phone number" + phoneNumber + " but this number is in the block list");
+                throw new Exception("Phone record from blocked number !!!");
+            } else {
+                Date date = new SimpleDateFormat("dd-MM-yy hh:mm:ss").parse(time);
+                Optional<ContactObj> contactObj = phoneService.getContact(phoneNumber);
+                PhoneRecordObj phoneRecordObj = PhoneRecordObj
+                        .builder()
+                        .time(date)
+                        .callType(callType)
+                        .duration(duration)
+                        .phoneNumber(phoneNumber)
+                        .isContact(contactObj.isPresent())
+                        .build();
+                phoneService.savePhoneRecord(phoneRecordObj);
+            }
+        } catch (Exception ex) {
+            String errorMsg = String.format("An error occurred while trying to add phone record %s %s %d %s to phone records", time, callType, duration, phoneNumber);
+            logger.error(errorMsg , ex);
         }
     }
 
@@ -126,7 +159,12 @@ public class PhoneController {
 
     @GetMapping("/getPhoneRecordsByPhoneNumber")
     public Collection<PhoneRecordObj> getPhoneRecordsByPhoneNumber(@RequestParam String phoneNumber) {
-        return phoneService.getAllRecordsByPhoneNumber(phoneNumber);
+        try {
+            return phoneService.getAllRecordsByPhoneNumber(phoneNumber);
+        } catch (Exception ex) {
+            logger.error("An error occurred while trying to return all phone records made by phone number " + phoneNumber, ex);
+            return Collections.emptyList();
+        }
     }
 
     /**
@@ -138,7 +176,12 @@ public class PhoneController {
 
     @GetMapping("/getAllRecordsGreaterThanDuration")
     public Collection<PhoneRecordObj> getAllRecordsGreaterThanDuration(@RequestParam Integer duration) {
-        return phoneService.getAllRecordsGreaterThanDuration(duration);
+        try {
+            return phoneService.getAllRecordsGreaterThanDuration(duration);
+        } catch (Exception ex) {
+            logger.error("An error occurred while trying to return all phone records with duration greater than " + duration, ex);
+            return Collections.emptyList();
+        }
     }
 
     /**
@@ -151,14 +194,18 @@ public class PhoneController {
 
     @GetMapping("/changePhoneNumber")
     public void changePhoneNumber(@RequestParam String oldPhoneNumber, @RequestParam String newPhoneNumber) {
-        ArrayList<PhoneRecordObj> phoneRecordObjs = new ArrayList<>(phoneService.getAllRecordsByPhoneNumber(oldPhoneNumber));
-        Optional<ContactObj> contactObj = phoneService.getContact(oldPhoneNumber);
-        if (contactObj.isPresent()) {
-            contactObj.get().setPhoneNumber(newPhoneNumber);
-            phoneService.saveContact(contactObj.get());
+        try {
+            ArrayList<PhoneRecordObj> phoneRecordObjs = new ArrayList<>(phoneService.getAllRecordsByPhoneNumber(oldPhoneNumber));
+            Optional<ContactObj> contactObj = phoneService.getContact(oldPhoneNumber);
+            if (contactObj.isPresent()) {
+                contactObj.get().setPhoneNumber(newPhoneNumber);
+                phoneService.saveContact(contactObj.get());
+            }
+            phoneRecordObjs.forEach((phoneRecordObj) -> phoneRecordObj.setPhoneNumber(newPhoneNumber));
+            phoneService.savePhoneRecords(phoneRecordObjs);
+        } catch (Exception ex) {
+            logger.error("An error occurred while trying to change phone number from " + oldPhoneNumber + "to " + newPhoneNumber, ex);
         }
-        phoneRecordObjs.forEach((phoneRecordObj) -> phoneRecordObj.setPhoneNumber(newPhoneNumber));
-        phoneService.savePhoneRecords(phoneRecordObjs);
     }
 
     private void updateContactInPhoneRecords(@RequestParam String phoneNumber, @RequestParam boolean isContact) {
