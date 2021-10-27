@@ -7,6 +7,7 @@ import com.motorola.demo.service.PhoneService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -29,18 +30,21 @@ public class PhoneController {
      */
 
     @GetMapping("/newBlockedNumber")
-    public void newBlockedNumber(@RequestParam String phoneNumber) {
+    public ResponseEntity<String> newBlockedNumber(@RequestParam String phoneNumber) {
         try {
             Optional<BlockedNumberObj> blockedNumber = phoneService.getBlockedNumber(phoneNumber);
             if (blockedNumber.isEmpty()) {
                 BlockedNumberObj blockedNumberObj = new BlockedNumberObj();
                 blockedNumberObj.setPhoneNumber(phoneNumber);
                 phoneService.saveBlockedNumber(blockedNumberObj);
+                return ResponseEntity.ok("The number " + phoneNumber + " added successfully to blocked list");
             } else {
                 logger.warn("Attempt to add phone number " + phoneNumber + " to blocked list but it is already blocked");
+                return ResponseEntity.internalServerError().body("Phone number " + phoneNumber + " is already blocked");
             }
         } catch (Exception ex) {
             logger.error("An error occurred while trying to add phone number " + phoneNumber + " to blocked list", ex);
+            return ResponseEntity.internalServerError().body("Server error");
         }
     }
 
@@ -51,16 +55,19 @@ public class PhoneController {
      */
 
     @GetMapping("/removeBlockedNumber")
-    public void removeBlockedNumber(@RequestParam String phoneNumber) {
+    public ResponseEntity<String> removeBlockedNumber(@RequestParam String phoneNumber) {
         try {
             Optional<BlockedNumberObj> blockedNumber = phoneService.getBlockedNumber(phoneNumber);
             if (blockedNumber.isPresent()) {
                 phoneService.removeBlockedNumber(blockedNumber.get());
+                return ResponseEntity.ok("The number " + phoneNumber + " successfully removed from blocked list");
             } else {
                 logger.warn("Attempt to remove phone number " + phoneNumber + " from blocked list but it is not a blocked number");
+                return ResponseEntity.internalServerError().body("Phone number " + phoneNumber + " is not in the blocked list");
             }
         } catch (Exception ex) {
             logger.error("An error occurred while trying to remove phone number " + phoneNumber + " from blocked list", ex);
+            return ResponseEntity.internalServerError().body("Server error");
         }
     }
 
@@ -74,7 +81,7 @@ public class PhoneController {
      */
 
     @GetMapping("/newContact")
-    public void newContact(@RequestParam String name, @RequestParam String phoneNumber) {
+    public ResponseEntity<String> newContact(@RequestParam String name, @RequestParam String phoneNumber) {
         try {
             Optional<ContactObj> contact = phoneService.getContact(phoneNumber);
             if (contact.isEmpty()) {
@@ -83,11 +90,14 @@ public class PhoneController {
                 contactObj.setPhoneNumber(phoneNumber);
                 phoneService.saveContact(contactObj);
                 updateContactInPhoneRecords(phoneNumber, true);
+                return ResponseEntity.ok("The number " + phoneNumber + " successfully added to contacts");
             } else {
                 logger.warn("Attempt to add phone number " + phoneNumber + " to contact list but it is already there");
+                return ResponseEntity.internalServerError().body("Phone number " + phoneNumber + " is not in the contacts");
             }
         } catch (Exception ex) {
             logger.error("An error occurred while trying to add new phone number " + phoneNumber + " to contacts list", ex);
+            return ResponseEntity.internalServerError().body("Server error");
         }
     }
 
@@ -100,17 +110,20 @@ public class PhoneController {
      */
 
     @GetMapping("/removeContact")
-    public void removeContact(@RequestParam String phoneNumber) {
+    public ResponseEntity<String> removeContact(@RequestParam String phoneNumber) {
         try {
             Optional<ContactObj> contact = phoneService.getContact(phoneNumber);
             if (contact.isPresent()) {
                 phoneService.removeContact(contact.get());
                 updateContactInPhoneRecords(phoneNumber, false);
+                return ResponseEntity.ok("The number " + phoneNumber + " successfully removed from contacts");
             } else {
                 logger.warn("Attempt to remove phone number " + phoneNumber + " from contacts but it is not a contact");
+                return ResponseEntity.internalServerError().body("Phone number " + phoneNumber + " is not in the contacts");
             }
         } catch (Exception ex) {
             logger.error("An error occurred while trying to remove phone number " + phoneNumber + " from contacts list", ex);
+            return ResponseEntity.internalServerError().body("Server error");
         }
     }
 
@@ -125,7 +138,7 @@ public class PhoneController {
      */
 
     @GetMapping("/newPhoneRecord")
-    public void newPhoneRecord(@RequestParam String time, @RequestParam String callType, @RequestParam Integer duration, @RequestParam String phoneNumber) throws Exception {
+    public ResponseEntity<String> newPhoneRecord(@RequestParam String time, @RequestParam String callType, @RequestParam Integer duration, @RequestParam String phoneNumber) throws Exception {
         Optional<BlockedNumberObj> blockedNumber = phoneService.getBlockedNumber(phoneNumber);
         try {
             if (blockedNumber.isPresent()) {
@@ -143,10 +156,12 @@ public class PhoneController {
                         .isContact(contactObj.isPresent())
                         .build();
                 phoneService.savePhoneRecord(phoneRecordObj);
+                return ResponseEntity.ok("New phone record successfully added");
             }
         } catch (Exception ex) {
             String errorMsg = String.format("An error occurred while trying to add phone record %s %s %d %s to phone records", time, callType, duration, phoneNumber);
             logger.error(errorMsg , ex);
+            return ResponseEntity.internalServerError().body("Server error");
         }
     }
 
@@ -158,12 +173,12 @@ public class PhoneController {
      */
 
     @GetMapping("/getPhoneRecordsByPhoneNumber")
-    public Collection<PhoneRecordObj> getPhoneRecordsByPhoneNumber(@RequestParam String phoneNumber) {
+    public ResponseEntity<Collection<PhoneRecordObj>> getPhoneRecordsByPhoneNumber(@RequestParam String phoneNumber) {
         try {
-            return phoneService.getAllRecordsByPhoneNumber(phoneNumber);
+            return ResponseEntity.ok(phoneService.getAllRecordsByPhoneNumber(phoneNumber));
         } catch (Exception ex) {
             logger.error("An error occurred while trying to return all phone records made by phone number " + phoneNumber, ex);
-            return Collections.emptyList();
+            return ResponseEntity.internalServerError().body(Collections.emptyList());
         }
     }
 
@@ -175,12 +190,12 @@ public class PhoneController {
      */
 
     @GetMapping("/getAllRecordsGreaterThanDuration")
-    public Collection<PhoneRecordObj> getAllRecordsGreaterThanDuration(@RequestParam Integer duration) {
+    public ResponseEntity<Collection<PhoneRecordObj>> getAllRecordsGreaterThanDuration(@RequestParam Integer duration) {
         try {
-            return phoneService.getAllRecordsGreaterThanDuration(duration);
+            return ResponseEntity.ok(phoneService.getAllRecordsGreaterThanDuration(duration));
         } catch (Exception ex) {
             logger.error("An error occurred while trying to return all phone records with duration greater than " + duration, ex);
-            return Collections.emptyList();
+            return ResponseEntity.internalServerError().body(Collections.emptyList());
         }
     }
 
@@ -193,7 +208,7 @@ public class PhoneController {
      */
 
     @GetMapping("/changePhoneNumber")
-    public void changePhoneNumber(@RequestParam String oldPhoneNumber, @RequestParam String newPhoneNumber) {
+    public ResponseEntity<String> changePhoneNumber(@RequestParam String oldPhoneNumber, @RequestParam String newPhoneNumber) {
         try {
             ArrayList<PhoneRecordObj> phoneRecordObjs = new ArrayList<>(phoneService.getAllRecordsByPhoneNumber(oldPhoneNumber));
             Optional<ContactObj> contactObj = phoneService.getContact(oldPhoneNumber);
@@ -203,8 +218,10 @@ public class PhoneController {
             }
             phoneRecordObjs.forEach((phoneRecordObj) -> phoneRecordObj.setPhoneNumber(newPhoneNumber));
             phoneService.savePhoneRecords(phoneRecordObjs);
+            return ResponseEntity.ok("Number changed successfully");
         } catch (Exception ex) {
             logger.error("An error occurred while trying to change phone number from " + oldPhoneNumber + "to " + newPhoneNumber, ex);
+            return ResponseEntity.internalServerError().body("Server error");
         }
     }
 
